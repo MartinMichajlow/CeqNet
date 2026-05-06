@@ -1,9 +1,12 @@
+# Taken from mlff (https://github.com/thorben-frank/mlff, commit 99dbf76)
+# Original author: Thorben Frank et al.
+# Modifications: renamed imports (mlff.src → src)
+
 import jax.numpy as jnp
 import numpy as np
 import jax
 import logging
 import time
-import wandb
 
 from functools import partial
 from pprint import pformat
@@ -53,7 +56,7 @@ def train_epoch(state: TrainState,
     perms = perms.reshape((steps_per_epoch, bs))
     batch_metrics = []
     for perm in perms:
-        batch = jax.tree_map(lambda y: y[perm, ...], ds)
+        batch = jax.tree.map(lambda y: y[perm, ...], ds)
         # batch = (Dict[str, Array[perm, ...]], Dict[str, Array[perm, ...]])
         state, metrics = train_step_fn(state, batch, loss_fn)
         batch_metrics.append(metrics)
@@ -103,7 +106,7 @@ def valid_epoch(state: TrainState,
     idxs = idxs[:steps_per_epoch * bs]  # skip incomplete batch
     idxs = idxs.reshape((steps_per_epoch, bs))
     for idx in idxs:
-        batch = jax.tree_map(lambda y: y[idx, ...], ds)
+        batch = jax.tree.map(lambda y: y[idx, ...], ds)
         # batch = (Dict[str, Array[perm, ...]], Dict[str, Array[perm, ...]])
         metrics = valid_step_fn(state, batch, metric_fn)
         batch_metrics.append(metrics)
@@ -214,7 +217,7 @@ def run_training(state: TrainState,
                                 'last checkpoint.')
             if np.isinf(train_metrics_np['loss']) or np.isnan(train_metrics_np['loss']):
                 def reset_records():
-                    return jax.tree_map(lambda x: jnp.zeros(x.shape), state.params['record'])
+                    return jax.tree.map(lambda x: jnp.zeros(x.shape), state.params['record'])
 
                 state_dict = checkpoints.restore_checkpoint(ckpt_dir=ckpt_dir, target=None, step=None,
                                                             prefix='checkpoint_loss_')
@@ -262,6 +265,7 @@ def run_training(state: TrainState,
             logging.info('Evaluation metrics: {}'.format(pformat(valid_metrics)))
 
         if use_wandb:
+            import wandb
             if i > 0:
                 wandb.log(times, step=i)
                 log_train_metrics = {key + '_train': train_metrics[key] for (key, item) in train_metrics.items()}

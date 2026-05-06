@@ -7,4 +7,4 @@ def check_leaves_nan(p):
     :param p:
     :return:
     """
-    return jax.tree_map(lambda y: np.sum(np.isnan(np.array(y))), p)
+    return jax.tree.map(lambda y: np.sum(np.isnan(np.array(y))), p)

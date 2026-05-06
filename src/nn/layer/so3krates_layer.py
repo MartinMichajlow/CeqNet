@@ -1,3 +1,7 @@
+# Adapted from mlff (https://github.com/thorben-frank/mlff, commit 99dbf76)
+# Original author: Thorben Frank et al.
+# Modifications: renamed imports (mlff.src → src); replaced SPHCLayerNorm with FAVOR+ fast attention hook
+
 import jax.numpy as jnp
 import flax.linen as nn
 import jax
@@ -507,10 +511,7 @@ class InteractionBlock(nn.Module):
         F = x.shape[-1]
         nl = len(self.degrees)
 
-        # chi_nl = self.selfmix(chi)
-
         d_chi = self.contraction_fn(chi)  # shape: (n,|l|)
-        # d_chi_nl = self.contraction_fn(chi_nl)
 
         y = jnp.concatenate([x, d_chi], axis=-1)  # shape: (n,F+|l|)
         a1, b1 = jnp.split(MLP(features=[int(F + nl)],
@@ -617,14 +618,6 @@ class SelfMixLayer(nn.Module):
         _l_out_max = max(self.harmonic_orders)
         _cg = init_clebsch_gordan_matrix(degrees=self.harmonic_orders, l_out_max=_l_out_max)
         self.expansion_fn = init_expansion_fn(degrees=self.harmonic_orders, cg=_cg)
-
-        # _repeats = [2 * y + 1 for y in self.harmonic_orders]
-        # _repeat_fn = partial(jnp.repeat, repeats=jnp.array(_repeats), axis=-1, total_repeat_length=sum(_repeats))
-        # _c = jnp.array([len(self.harmonic_orders)-y if y > 0 else 1 for y in self.harmonic_orders])
-        # # as we are only considering the case of l1 > l2, the zeroth orders has not n_l possibilities for contraction
-        # # but none. If one were to include the case of l1=l2 which means k=0 in jnp.triu() function, then one has to
-        # # remove the if statement and give l3=0 the normalization factor of 1/4.
-        # self.c = _repeat_fn(1./_c)  # shape: (m_tot)
 
         _nl = len(self.harmonic_orders)
         _repeats = [2 * y + 1 for y in self.harmonic_orders]
@@ -874,7 +867,6 @@ class SphConvAttention(nn.Module):
         self.sow('record', 'alpha_s', alpha_s_ij)
         self.sow('record', 'alpha', alpha_ij)
         # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-        # chi_j = chi[idx_j]
         alpha_ij = self.repeat_fn(alpha_ij)  # shape: (n_pairs,m_tot)
         chi_ = segment_sum(alpha_ij * sph_ij, segment_ids=idx_i, num_segments=x.shape[0])  # shape: (n,m_tot)
         return chi_
@@ -942,8 +934,6 @@ class _ConvAttentionCoefficients(nn.Module):
 
         y = jnp.concatenate([q_i, k_j, w_ij], axis=-1)
         return MLP(features=[F, 1], activation_fn=silu)(y).squeeze(axis=-1)
-
-        # return (q_i * w_ij * k_j).sum(axis=-1)# / jnp.sqrt(x.shape[-1])
 
 
 class AttentionAggregation(nn.Module):

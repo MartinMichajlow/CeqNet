@@ -1,4 +1,4 @@
-import pkg_resources
+import importlib.resources
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -6,13 +6,13 @@ import itertools as it
 from functools import partial
 from typing import (Callable, Sequence)
 
-# CG_PATH = os.path.abspath('cgmatrix.npz')
 indx_fn = lambda x: int((x+1)**2) if x >= 0 else 0
 
 
 def load_cgmatrix():
-    stream = pkg_resources.resource_stream(__name__, 'cgmatrix.npz')
-    return np.load(stream)['cg']
+    ref = importlib.resources.files(__spec__.parent).joinpath('cgmatrix.npz')
+    with ref.open('rb') as f:
+        return np.load(f)['cg']
 
 
 def init_clebsch_gordan_matrix(degrees, l_out_max=None):

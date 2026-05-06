@@ -1,3 +1,9 @@
+# Partially adapted from mlff (https://github.com/thorben-frank/mlff, commit 99dbf76)
+# Original author (mlff): Thorben Frank et al.
+# Modifications: renamed imports (mlff.src → src)
+# Original contributions: pad_ceq, pad_coordinates_single, pad_partial_charges,
+#   pad_partial_charges_single, pad_atomic_types_single
+
 import numpy as np
 import jax.numpy as jnp
 from src.geometric.metric import coordinates_to_distance_matrix
@@ -5,6 +11,7 @@ from jax.ops import segment_sum
 from src.masking import safe_scale
 from functools import partial
 
+# [Original contribution]
 def pad_ceq(A, point_mask):
     """
     Filling a 0-padded matrix A from [42], eq. (6), with ones at proper positions, to imitate eq. (6) for padded atom
@@ -73,6 +80,7 @@ def pad_coordinates(R, n_max, pad_value=0):
     return np.pad(R, ((0, 0), (0, pad_length), (0, 0)), mode='constant',
                   constant_values=((0, 0), (0, pad_value), (0, 0)))
 
+# [Original contribution]
 def pad_coordinates_single(R, n_max, pad_value=0):
     n = R.shape[-2]
 
@@ -82,6 +90,7 @@ def pad_coordinates_single(R, n_max, pad_value=0):
     return np.pad(R, ((0, pad_length), (0, 0)), mode='constant',
                   constant_values=((0, 0), (0, pad_value)))
 
+# [Original contribution]
 def pad_partial_charges(q, n_max, pad_value=0):
     n = q.shape[-2]
 
@@ -90,6 +99,7 @@ def pad_partial_charges(q, n_max, pad_value=0):
 
     return np.pad(q, ((0, 0), (0, pad_length), (0, 0)), mode='constant', constant_values=((0, 0), (0, pad_value), (0, 0)))
 
+# [Original contribution]
 def pad_partial_charges_single(q, n_max, pad_value=0):
     n = q.shape[-1]
 
@@ -107,6 +117,7 @@ def pad_atomic_types(z, n_max, pad_value=0):
     return np.pad(z, ((0, 0), (0, pad_length)), mode='constant', constant_values=((0, 0), (0, pad_value)))
 
 
+# [Original contribution]
 def pad_atomic_types_single(z, n_max, pad_value=0):
     n = z.shape[-1]
 

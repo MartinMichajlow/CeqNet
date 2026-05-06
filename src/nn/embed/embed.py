@@ -1,3 +1,12 @@
+# Partially adapted from mlff (https://github.com/thorben-frank/mlff, commit 99dbf76)
+# Original author (mlff): Thorben Frank et al.
+# Adapted from mlff: AtomTypeEmbed, ChargeSpinEmbed, GeometryEmbed (base structure), _init_sphc
+# Adapted from ChargeSpinEmbed (mlff): ChargeEmbed (wraps inputs via prop_keys; adds safe_mask
+#   for padded atoms and zeroes output when total charge Q=0)
+# Original contributions: CeqEmbed, HardnessEmbed
+
+import re
+
 import jax
 import jax.numpy as jnp
 from jax.nn import silu
@@ -20,11 +29,6 @@ from ase.data import covalent_radii
 
 from src.nn.mlp import MLP
 from src.sph_ops.spherical_harmonics import init_sph_fn
-
-# TODO: write init_from_dict methods in order to improve backward compatibility. E.g. AtomTypeEmbed(**h)
-# will only work as long as the properties of the class are exactly the ones equal to the ones in h. As soon
-# as additional arguments appear in h. Maybe use something like kwargs to allow for extensions?
-
 
 class AtomTypeEmbed(BaseSubModule):
     num_embeddings: int
@@ -64,174 +68,115 @@ class AtomTypeEmbed(BaseSubModule):
 
 
 
-class kQeqHardnessEmbed(BaseSubModule):
-    num_embeddings: int
-    prop_keys: Dict
-    module_name: str = 'kQeqHardness_embed'
-
-    """
-    Embedding for hardnesses (set to 0 !) and SOAP standard deviations taken from covalent radii from ase package as in 
-    [39] 
-    """
-
-    def setup(self):
-        self.total_charge_key = self.prop_keys.get('total_charge')
-        self.atomic_type_key = self.prop_keys.get('atomic_type')
-
-    @nn.compact
-    def __call__(self,
-                 inputs: Dict,
-                 *args,
-                 **kwargs):
-        """
-
-        Args:
-           inputs (Dict):
-                z (Array): atomic types, shape: (n)
-                Q (Array): total charge, shape: (1)
-                point_mask (Array): Mask for atom-wise operations, shape: (n)
-            *args ():
-            **kwargs ():
-
-        Returns:
-
-        """
-        z = inputs[self.atomic_type_key]
-        sigma = jnp.take(covalent_radii, z)
-        z = z.astype(jnp.int32)  # shape: (n)
-        J = jnp.zeros_like(z)  # shape: (n)
-        return {'J': J, 'sigma': sigma}
-
-    def __dict_repr__(self):
-        return {self.module_name: {'num_embeddings': self.num_embeddings,
-                                   'prop_keys': self.prop_keys}}
-
-
-# uff_radius_qeq = {'H': 0.371, 'He': 1.3, 'Li': 1.557, 'Be': 1.24, 'B': 0.822, 'C': 0.759, 'N': 0.715, 'O': 0.669, 'F': 0.706, 'Ne': 1.768, 'Na': 2.085, 'Mg': 1.5, 'Al': 1.201, 'Si': 1.176, 'P': 1.102, 'S': 1.047, 'Cl': 0.994, 'Ar': 2.108, 'K': 2.586, 'Ca': 2.0, 'Sc': 1.75, 'Ti': 1.607, 'V': 1.47, 'Cr': 1.402, 'Mn': 1.533, 'Fe': 1.393, 'Co': 1.406, 'Ni': 1.398, 'Cu': 1.434, 'Zn': 1.4, 'Ga': 1.211, 'Ge': 1.189, 'As': 1.204, 'Se': 1.224, 'Br': 1.141, 'Kr': 2.27, 'Rb': 2.77, 'Sr': 2.415, 'Y': 1.998, 'Zr': 1.758, 'Nb': 1.603, 'Mo': 1.53, 'Tc': 1.5, 'Ru': 1.5, 'Rh': 1.509, 'Pd': 1.544, 'Ag': 1.622, 'Cd': 1.6, 'In': 1.404, 'Sn': 1.354, 'Sb': 1.404, 'Te': 1.38, 'I': 1.333, 'Xe': 2.459, 'Cs': 2.984, 'Ba': 2.442, 'La': 2.071, 'Ce': 1.925, 'Pr': 2.007, 'Nd': 2.007, 'Pm': 2.0, 'Sm': 1.978, 'Eu': 2.227, 'Gd': 1.968, 'Tb': 1.954, 'Dy': 1.934, 'Ho': 1.925, 'Er': 1.915, 'Tm': 2.0, 'Yb': 2.158, 'Lu': 1.896, 'Hf': 1.759, 'Ta': 1.605, 'W': 1.538, 'Re': 1.6, 'Os': 1.7, 'Ir': 1.866, 'Pt': 1.557, 'Au': 1.618, 'Hg': 1.6, 'Tl': 1.53, 'Pb': 1.444, 'Bi': 1.514, 'Po': 1.48, 'At': 1.47, 'Rn': 2.2, 'Fr': 2.3, 'Ra': 2.2, 'Ac': 2.108, 'Th': 2.018, 'Pa': 1.8, 'U': 1.713, 'Np': 1.8, 'Pu': 1.84, 'Am': 1.942, 'Cm': 1.9, 'Bk': 1.9, 'Cf': 1.9, 'Es': 1.9, 'Fm': 1.9, 'Md': 1.9, 'No': 1.9, 'Lr': 1.9}
-missing = 0.2
 qeq_radii = np.array([np.inf, 0.371, 1.3, 1.557, 1.24, 0.822, 0.759, 0.715, 0.669, 0.706, 1.768, 2.085, 1.5, 1.201, 1.176, 1.102, 1.047])
 
-class QeqEmbed(BaseSubModule):
+
+def _parse_sgm_scale(mode: str):
+    """Return the float scale from a '{N}sgm' mode string, or None if not that pattern."""
+    m = re.match(r'^(\d+(?:\.\d+)?)sgm$', mode)
+    return float(m.group(1)) if m else None
+
+
+# [Original contribution]
+class CeqEmbed(BaseSubModule):
+    """
+    Produces per-atom atomic hardnesses J_i and Gaussian widths σ_i for the
+    charge-equilibration (CeQ) layer.
+
+    hardness_mode and radii_mode accept the same set of tokens:
+
+      'learnable'   — unconstrained learnable embedding; output can be negative.
+      'zero'        — fixed at zero (disables the on-site diagonal in the CeQ matrix).
+      'exp'         — exp(e_i); always positive, unbounded.
+      '{N}sgm'      — N · σ(e_i); positive, bounded in (0, N).  N is any positive
+                      number, e.g. '20sgm'.
+      'a_sgm'       — |e_i| · σ(e_i); non-negative, data-dependent upper bound.
+      'a_abs'       — |e_i|; non-negative absolute value.
+      'softplus'      — log(1 + exp(e_z)); always positive, smooth.
+
+    Additional tokens for radii_mode only (fixed, non-learnable tables):
+      'ase'         — ASE covalent radii (fixed per element).
+      'qeq'         — QeQ radii from Rappé & Goddard (1991) (fixed per element).
+      'ase_scaled'  — ASE radii multiplied by a learnable per-element scale factor.
+      'qeq_scaled'  — QeQ radii multiplied by a learnable per-element scale factor.
+
+    Outputs: {'J': Array (n,), 'sigma': Array (n,)}
+    """
     num_embeddings: int
     prop_keys: Dict
-    hardness_mode: str  # 'learnable' or 'zero
-    radii_mode: str  # mode for determining the SOAP Gaussian variances. 'learnable', 'ase', 'qeq', 'ase_scaled',
-    # 'qeq_scaled'
+    hardness_mode: str
+    radii_mode: str
     module_name: str = 'qeq_embed'
-
-    """
-    Embedding for charge equilibration values (Hardnesses and SOAP Gaussian variances). Opposed to kQeqHardnessEmbed and 
-    HardnessEmbed, it has modularity
-    [39] 
-    """
 
     def setup(self):
         self.total_charge_key = self.prop_keys.get('total_charge')
         self.atomic_type_key = self.prop_keys.get('atomic_type')
 
     @nn.compact
-    def __call__(self,
-                 inputs: Dict,
-                 *args,
-                 **kwargs):
+    def __call__(self, inputs: Dict, *args, **kwargs):
         """
-
         Args:
-           inputs (Dict):
+            inputs (Dict):
                 z (Array): atomic types, shape: (n)
-                Q (Array): total charge, shape: (1)
-                point_mask (Array): Mask for atom-wise operations, shape: (n)
-            *args ():
-            **kwargs ():
-
-        Returns:
-
+                point_mask (Array): mask for atom-wise operations, shape: (n)
+        Returns: {'J': Array (n,), 'sigma': Array (n,)}
         """
-        z = inputs[self.atomic_type_key]
-        z = z.astype(jnp.int32)  # shape: (n)
+        z = inputs[self.atomic_type_key].astype(jnp.int32)
         point_mask = inputs['point_mask']
-        J = None
-        sigma = None
-        # assigning hardness
-        if self.hardness_mode == 'learnable':
-            J = safe_scale(nn.Embed(num_embeddings=self.num_embeddings, features=1)(z),
-                           scale=point_mask[:, None])  # shape: (n_atoms,1)
-            J = jnp.squeeze(J)
+
+        def _embed1():
+            return nn.Embed(num_embeddings=self.num_embeddings, features=1)(z)
+
+        def _scalar(raw):
+            return jnp.squeeze(safe_scale(raw, scale=point_mask[:, None]))
+
+        # --- hardness J ---
+        sgm = _parse_sgm_scale(self.hardness_mode)
+        if sgm is not None:
+            J = _scalar(sgm * jax.nn.sigmoid(_embed1()))
+        elif self.hardness_mode == 'learnable':
+            J = _scalar(_embed1())
         elif self.hardness_mode == 'zero':
-            J = jnp.zeros_like(z)  # shape: (n)
+            J = jnp.zeros(z.shape, dtype=jnp.float32)
         elif self.hardness_mode == 'exp':
-            J = safe_scale(jnp.exp(nn.Embed(num_embeddings=self.num_embeddings, features=1)(z)),
-                           scale=point_mask[:, None])  # shape: (n_atoms,1)
-            J = jnp.squeeze(J)
-        elif self.hardness_mode == '20sgm':
-            J = safe_scale(20 * jax.nn.sigmoid(nn.Embed(num_embeddings=self.num_embeddings, features=1)(z)),
-                               scale=point_mask[:, None])
-            J = jnp.squeeze(J)
-        elif self.hardness_mode == '15sgm':
-            J = safe_scale(20 * jax.nn.sigmoid(nn.Embed(num_embeddings=self.num_embeddings, features=1)(z)),
-                               scale=point_mask[:, None])
-            J = jnp.squeeze(J)
+            J = _scalar(jnp.exp(_embed1()))
         elif self.hardness_mode == 'a_sgm':
-            J = safe_scale(jnp.abs(nn.Embed(num_embeddings=self.num_embeddings, features=1)(z))
-                               * jax.nn.sigmoid(nn.Embed(num_embeddings=self.num_embeddings, features=1)(z)),
-                               scale=point_mask[:, None])
-            J = jnp.squeeze(J)
+            e = _embed1()
+            J = _scalar(jnp.abs(e) * jax.nn.sigmoid(e))
         elif self.hardness_mode == 'a_abs':
-            J = safe_scale(jnp.abs(nn.Embed(num_embeddings=self.num_embeddings, features=1)(z)),
-                               scale=point_mask[:, None])
-            J = jnp.squeeze(J)
-        elif self.hardness_mode == 'ln1exp':
-            J = safe_scale(jnp.log(1 + jnp.exp(nn.Embed(num_embeddings=self.num_embeddings, features=1)(z))),
-                               scale=point_mask[:, None])
-            J = jnp.squeeze(J)
+            J = _scalar(jnp.abs(_embed1()))
+        elif self.hardness_mode == 'softplus':
+            J = _scalar(jnp.log(1 + jnp.exp(_embed1())))
+        else:
+            raise ValueError(f"Unknown hardness_mode: {self.hardness_mode!r}")
 
-
-        # assigning SOAP Gaussian variances
-        if self.radii_mode == 'ase':
-            sigma = safe_scale(jnp.take(covalent_radii, z), scale=point_mask)  # shape: (n)
-        elif self.radii_mode == 'qeq':
-            sigma = safe_scale(jnp.take(qeq_radii, z), scale=point_mask)  # shape: (n)
+        # --- Gaussian widths sigma ---
+        sgm = _parse_sgm_scale(self.radii_mode)
+        if sgm is not None:
+            sigma = _scalar(sgm * jax.nn.sigmoid(_embed1()))
         elif self.radii_mode == 'learnable':
-            sigma = safe_scale(nn.Embed(num_embeddings=self.num_embeddings, features=1)(z),
-                           scale=point_mask[:, None])  # shape: (n_atoms,1)
-            sigma = jnp.squeeze(sigma)
+            sigma = _scalar(_embed1())
+        elif self.radii_mode == 'ase':
+            sigma = safe_scale(jnp.take(covalent_radii, z), scale=point_mask)
+        elif self.radii_mode == 'qeq':
+            sigma = safe_scale(jnp.take(qeq_radii, z), scale=point_mask)
         elif self.radii_mode == 'ase_scaled':
-            sigma = safe_scale(jnp.take(covalent_radii, z), scale=point_mask)  # shape: (n)
-            factors = safe_scale(nn.Embed(num_embeddings=self.num_embeddings, features=1)(z),
-                           scale=point_mask[:, None])  # shape: (n_atoms,1)
-            factors = jnp.squeeze(factors)
-            sigma = factors * sigma
+            base = safe_scale(jnp.take(covalent_radii, z), scale=point_mask)
+            sigma = _scalar(_embed1()) * base
         elif self.radii_mode == 'qeq_scaled':
-            sigma = safe_scale(jnp.take(qeq_radii, z), scale=point_mask)  # shape: (n)
-            factors = safe_scale(nn.Embed(num_embeddings=self.num_embeddings, features=1)(z),
-                           scale=point_mask[:, None])  # shape: (n_atoms,1)
-            factors = jnp.squeeze(factors)
-            sigma = factors * sigma
+            base = safe_scale(jnp.take(qeq_radii, z), scale=point_mask)
+            sigma = _scalar(_embed1()) * base
         elif self.radii_mode == 'exp':
-            sigma = safe_scale(jnp.exp(nn.Embed(num_embeddings=self.num_embeddings, features=1)(z)),
-                           scale=point_mask[:, None])  # shape: (n_atoms,1)
-            sigma = jnp.squeeze(sigma)
-        elif self.radii_mode == '20sgm':
-            sigma = safe_scale(20 * jax.nn.sigmoid(nn.Embed(num_embeddings=self.num_embeddings, features=1)(z)),
-                           scale=point_mask[:, None])
-            sigma = jnp.squeeze(sigma)
-        elif self.radii_mode == '15sgm':
-            sigma = safe_scale(20 * jax.nn.sigmoid(nn.Embed(num_embeddings=self.num_embeddings, features=1)(z)),
-                           scale=point_mask[:, None])
-            sigma = jnp.squeeze(sigma)
+            sigma = _scalar(jnp.exp(_embed1()))
         elif self.radii_mode == 'a_sgm':
-            sigma = safe_scale(jnp.abs(nn.Embed(num_embeddings=self.num_embeddings, features=1)(z))
-                * jax.nn.sigmoid(nn.Embed(num_embeddings=self.num_embeddings, features=1)(z)),
-                               scale=point_mask[:, None])
-            sigma = jnp.squeeze(sigma)
+            e = _embed1()
+            sigma = _scalar(jnp.abs(e) * jax.nn.sigmoid(e))
         elif self.radii_mode == 'a_abs':
-            sigma = safe_scale(jnp.abs(nn.Embed(num_embeddings=self.num_embeddings, features=1)(z)),
-                               scale=point_mask[:, None])
-            sigma = jnp.squeeze(sigma)
-        elif self.radii_mode == 'ln1exp':
-            sigma = safe_scale(jnp.log(1 + jnp.exp(nn.Embed(num_embeddings=self.num_embeddings, features=1)(z))),
-                               scale=point_mask[:, None])
-            sigma = jnp.squeeze(sigma)
+            sigma = _scalar(jnp.abs(_embed1()))
+        elif self.radii_mode == 'softplus':
+            sigma = _scalar(jnp.log(1 + jnp.exp(_embed1())))
+        else:
+            raise ValueError(f"Unknown radii_mode: {self.radii_mode!r}")
 
         return {'J': J, 'sigma': sigma}
 
@@ -241,6 +186,7 @@ class QeqEmbed(BaseSubModule):
                                    'hardness_mode': self.hardness_mode,
                                    'radii_mode': self.radii_mode}}
 
+# [Original contribution]
 class HardnessEmbed(BaseSubModule):
     num_embeddings: int
     prop_keys: Dict
@@ -276,9 +222,6 @@ class HardnessEmbed(BaseSubModule):
         """
         z = inputs[self.atomic_type_key]
         point_mask = inputs['point_mask']
-        # Hardcoded covalent radii standard deviations:
-        #cov_r_std = {'0': np.inf,'1': 5, '6': 1, '7': 1, '8': 2, '9': 3}
-        #sigma = np.array([cov_r_std[str(z[i])] for i in range(len(z))])
         cov_r_std = jnp.array([0, 5, 0, 7, 3, 3, 1, 1, 2, 3, 0, 9, 7])
         sigma = safe_scale(jnp.take(cov_r_std, z), scale=point_mask)
         z = z.astype(jnp.int32)  # shape: (n)
@@ -330,7 +273,7 @@ class GeometryEmbed(BaseSubModule):
 
         _cut_fn = get_cutoff_fn(self.radial_cutoff_fn)
         self.cut_fn = partial(_cut_fn, r_cut=self.r_cut)
-        self._lambda = jnp.float32(self.sphc_normalization)
+        self._lambda = jnp.float32(self.sphc_normalization) if self.sphc_normalization is not None else None
 
     def __call__(self, inputs: Dict, *args, **kwargs):
         """
@@ -466,6 +409,7 @@ def _init_sphc_zeros(z, sph_ij, *args, **kwargs):
     return {'chi': jnp.zeros((z.shape[-1], sph_ij.shape[-1]), dtype=sph_ij.dtype)}
 
 
+# [Adapted from ChargeSpinEmbed (mlff)]
 class ChargeEmbed(BaseSubModule):
     features: int
     prop_keys: Dict
@@ -567,40 +511,3 @@ class ChargeSpinEmbed(nn.Module):
         e_psi = jnp.where(psi != 0, e_psi, jnp.zeros_like(e_psi))
         return safe_scale(e_psi, scale=point_mask[:, None])  # shape: (n,F)
 
-
-class _ChargeEmbed(BaseSubModule):
-    features: int
-    prop_keys: Dict
-    num_embeddings: int = 100
-    module_name: str = 'tot_charge_embed'
-
-    def setup(self):
-        self.total_charge_key = self.prop_keys.get('total_charge')
-        self.atomic_type_key = self.prop_keys.get('atomic_type')
-
-    @nn.compact
-    def __call__(self,
-                 inputs: Dict,
-                 *args,
-                 **kwargs):
-        """
-        Args:
-           inputs (Dict):
-                z (Array): atomic types, shape: (n)
-                Q (Array): total charge, shape: (1)
-                point_mask (Array): Mask for atom-wise operations, shape: (n)
-            *args ():
-            **kwargs ():
-        Returns:
-        """
-        z = inputs[self.atomic_type_key]
-        Q = inputs[self.total_charge_key]
-        point_mask = inputs['point_mask']
-
-        return ChargeSpinEmbed(num_embeddings=self.num_embeddings,
-                               features=self.features)(z=z, psi=Q, point_mask=point_mask)
-
-    def __dict_repr__(self):
-        return {self.module_name: {'num_embeddings': self.num_embeddings,
-                                   'features': self.features,
-                                   'prop_keys': self.prop_keys}}

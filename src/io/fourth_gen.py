@@ -2,13 +2,13 @@
 import logging
 
 import numpy as np
-from src.data import DataSet
 import jax
 
 def load_fg_data(data_path: str, prop_keys: dict, n_data = None):
     """
     loads the and [:n_data]-chunk of the fourth gen data set, which is stored at data_path.
     """
+    from src.data.dataset import DataSet
     data_tot = dict(np.load(data_path))
 
     # loading the complete dataset might lead to memory issues, so we slice n_data many datapoint off
@@ -47,5 +47,5 @@ def load_fg_test_data(data_path, train_split, prop_keys, n_data = 10000):
     :return:
     """
     data = load_fg_data(data_path, prop_keys, n_data)
-    test_data = jax.tree_map(lambda y: y[train_split['random_split']['data_idx_test']], data.data)
+    test_data = jax.tree.map(lambda y: y[train_split['random_split']['data_idx_test']], data.data)
     return test_data

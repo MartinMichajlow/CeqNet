@@ -1,3 +1,7 @@
+# Taken from mlff (https://github.com/thorben-frank/mlff, commit 99dbf76)
+# Original author: Thorben Frank et al.
+# Modifications: renamed imports (mlff.src → src)
+
 import jax
 import numpy as np
 import logging
@@ -31,8 +35,8 @@ class DataSet:
             else:
                 return y
 
-        q_data = jax.tree_map(lambda y: reshape(y), q_data)
-        max_key = max(jax.tree_map(lambda y: len(y), q_data), key=jax.tree_map(lambda y: len(y), q_data).get)
+        q_data = jax.tree.map(lambda y: reshape(y), q_data)
+        max_key = max(jax.tree.map(lambda y: len(y), q_data), key=jax.tree.map(lambda y: len(y), q_data).get)
         n_data = len(q_data[max_key])
 
         def repeat(name, y, repeats):
@@ -299,7 +303,7 @@ class DataSet:
         return self.index_split(r_cut=r_cut, **subset_split)
 
     def save_splits_to_file(self, path, filename):
-        splits_ = jax.tree_map(lambda y: y.tolist(), self.splits)
+        splits_ = jax.tree.map(lambda y: y.tolist(), self.splits)
         save_json(path=path, filename=filename, data=splits_, overwrite=False)
         logging.info('Saved the data indices of the splits to {}'.format(os.path.join(path, filename)))
 

@@ -1,9 +1,8 @@
 from .embed import (AtomTypeEmbed,
                     HardnessEmbed,
-                    kQeqHardnessEmbed,
                     GeometryEmbed,
                     ChargeEmbed,
                     ChargeSpinEmbed,
-                    QeqEmbed
+                    CeqEmbed,
                     )
 from .h_register import get_embedding_module

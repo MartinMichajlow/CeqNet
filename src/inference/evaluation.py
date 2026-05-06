@@ -1,3 +1,11 @@
+# Partially adapted from mlff (https://github.com/thorben-frank/mlff, commit 99dbf76)
+# Original author (mlff): Thorben Frank et al.
+# Adapted from mlff: tree_concatenate_tensors, evaluate_model, mae_metric, mse_metric, rmse_metric
+# Original contributions: get_n_params, get_metric_scores, mae_abs_metric, rrmse_metric,
+#   rrmse_metric_ea0_D, rmse_metric_Debye, mae_abs_metric_Debye, rrmse_metric_Debye,
+#   rrmse_metric_oldsq, atomwise_rmse_metric, pearson_correlation_coefficient,
+#   metrics_from_targets_preds
+
 import logging
 logging.basicConfig(level=logging.INFO)
 import jax
@@ -12,8 +20,9 @@ Array = Any
 
 
 def tree_concatenate_tensors(py_tree_1, py_tree_2, axis=0):
-    return jax.tree_map(lambda x, y: np.concatenate([x, y], axis=axis), py_tree_1, py_tree_2)
+    return jax.tree.map(lambda x, y: np.concatenate([x, y], axis=axis), py_tree_1, py_tree_2)
 
+# [Original contribution]
 def get_n_params(params):
     """
     returns the number of parameters stored in params
@@ -74,30 +83,31 @@ def evaluate_model(params,
         # if verbose:
         #     logging.info("Evaluate batch {} from {}".format(i + 1, n_batches))
 
-        input_batch = jax.tree_map(lambda y: y[idx, ...], inputs)
+        input_batch = jax.tree.map(lambda y: y[idx, ...], inputs)
         obs_pred_ = obs_fn(params, input_batch)
         if len(obs_pred) == 0:
             obs_pred.update(obs_pred_)
         else:
             obs_pred = tree_concatenate_tensors(obs_pred, obs_pred_, axis=0)
 
-    inputs = jax.tree_map(lambda x: x[:int(n_batches * batch_size)], inputs)
+    inputs = jax.tree.map(lambda x: x[:int(n_batches * batch_size)], inputs)
     if targets is not None:
-        targets = jax.tree_map(lambda x: x[:int(n_batches * batch_size)], targets)
+        targets = jax.tree.map(lambda x: x[:int(n_batches * batch_size)], targets)
 
     metrics = {}
     if metric_fn is not None:
-        # flattened_predictions = jax.tree_map(lambda x: x[:int(n_batches * batch_size)], obs_pred)
+        # flattened_predictions = jax.tree.map(lambda x: x[:int(n_batches * batch_size)], obs_pred)
         for m_name, m_fn in metric_fn.items():
-            metrics[m_name] = jax.tree_map(lambda x, y: m_fn(prediction=x, target=y), obs_pred, targets)
+            metrics[m_name] = jax.tree.map(lambda x, y: m_fn(prediction=x, target=y), obs_pred, targets)
 
     return metrics, {'inputs': inputs, 'predictions': obs_pred, 'targets': targets}
 
+# [Original contribution]
 def get_metric_scores(preds: Array, targets: Array, metric_fn: Dict[str, Callable]) -> Dict:
 
     metrics = {}
     for m_name, m_fn in metric_fn.items():
-        metrics[m_name] = jax.tree_map(lambda x, y: m_fn(prediction=x, target=y), preds, targets)
+        metrics[m_name] = jax.tree.map(lambda x, y: m_fn(prediction=x, target=y), preds, targets)
     return metrics
 
 def mae_metric(prediction: Array, target: Array, pad_value: float = None) -> Array:
@@ -162,6 +172,7 @@ def rmse_metric(prediction: Array, target: Array, pad_value: float = None) -> Ar
     """
     return np.sqrt(mse_metric(prediction=prediction, target=target, pad_value=pad_value))
 
+# [Original contribution]
 def mae_abs_metric(prediction: Array, target: Array) -> Array:
     """
     Metric function for mean absolute error of absolute dipoles. Since every molecule gets assigned exactly one dipole,
@@ -180,6 +191,7 @@ def mae_abs_metric(prediction: Array, target: Array) -> Array:
     return np.abs(np.linalg.norm(np.squeeze(p), axis=-1) - np.linalg.norm(np.squeeze(t), axis=-1)).mean()
 
 
+# [Original contribution]
 def rrmse_metric(prediction: Array, target: Array, treshold: float = 1) -> Array:
     """
     Metric function for regularized root mean square error. Padding values can be excluded from the metric calculation.
@@ -199,6 +211,7 @@ def rrmse_metric(prediction: Array, target: Array, treshold: float = 1) -> Array
             / np.maximum(np.linalg.norm(np.squeeze(t), axis=-1), treshold * np.ones(p.shape[0]))).mean()
 
 
+# [Original contribution]
 def rrmse_metric_ea0_D(prediction: Array, target: Array, treshold: float = 1) -> Array:
     """
     Metric function for regularized root mean square error of the dipole moment, which are scaled from ea_0 to Debye.
@@ -220,6 +233,7 @@ def rrmse_metric_ea0_D(prediction: Array, target: Array, treshold: float = 1) ->
             / np.maximum(np.linalg.norm(np.squeeze(t), axis=-1), treshold * np.ones(p.shape[0]))).mean()
 
 
+# [Original contribution]
 def rmse_metric_Debye(prediction: Array, target: Array, pad_value: float = None) -> Array:
     """
     Metric function for root mean square error. Padding values can be excluded from the metric calculation.
@@ -234,6 +248,7 @@ def rmse_metric_Debye(prediction: Array, target: Array, pad_value: float = None)
     """
     return np.sqrt(mse_metric(prediction=prediction*2.541746229, target=target*2.541746229, pad_value=pad_value))
 
+# [Original contribution]
 def mae_abs_metric_Debye(prediction: Array, target: Array) -> Array:
     """
     Metric function for mean absolute error of absolute dipoles. Since every molecule gets assigned exactly one dipole,
@@ -252,6 +267,7 @@ def mae_abs_metric_Debye(prediction: Array, target: Array) -> Array:
     return np.abs(np.linalg.norm(np.squeeze(p), axis=-1) - np.linalg.norm(np.squeeze(t), axis=-1)).mean()
 
 
+# [Original contribution]
 def rrmse_metric_Debye(prediction: Array, target: Array, treshold: float = 1) -> Array:
     """
     Metric function for regularized root mean square error. Padding values can be excluded from the metric calculation.
@@ -270,6 +286,7 @@ def rrmse_metric_Debye(prediction: Array, target: Array, treshold: float = 1) ->
     return  np.sqrt(((100 *(np.abs((np.linalg.norm(np.squeeze(p),axis=-1) - np.linalg.norm(np.squeeze(t), axis=-1)))
             / np.maximum(np.linalg.norm(np.squeeze(t), axis=-1), treshold * np.ones(t.shape[0]))))**2).mean())
 
+# [Original contribution]
 def rrmse_metric_oldsq(prediction: Array, target: Array, treshold: float = 1) -> Array:
     """
     Metric function for regularized root mean square error. Padding values can be excluded from the metric calculation.
@@ -289,6 +306,7 @@ def rrmse_metric_oldsq(prediction: Array, target: Array, treshold: float = 1) ->
                            / np.maximum(np.linalg.norm(np.squeeze(t), axis=-1),
                                         treshold * np.ones(t.shape[0]))) ** 2).mean())
 
+# [Original contribution]
 def atomwise_rmse_metric(prediction: Array, target: Array, n_a) -> Array:
     """
     Metric function for atomwise root mean square error. Padding values can be excluded from the metric calculation.
@@ -309,6 +327,7 @@ def atomwise_rmse_metric(prediction: Array, target: Array, n_a) -> Array:
 
     return np.sqrt(1 / n_tst * ((((p - t / n_a)) ** 2).sum()))
 
+# [Original contribution]
 def pearson_correlation_coefficient(prediction: Array, target: Array, pad_value: float = None) -> Array:
     """
     Metric function for pearson correlation coefficient. Padding values can be excluded from the metric calculation.
@@ -331,6 +350,7 @@ def pearson_correlation_coefficient(prediction: Array, target: Array, pad_value:
 
     return ((p - p_mean) * (t - t_mean)).sum() / np.sqrt(((p - p_mean)**2).sum() * ((t - t_mean)**2).sum())
 
+# [Original contribution]
 def metrics_from_targets_preds(targets, preds, metric_fn, batch_size=1):
 
     n_data = len(targets)
@@ -343,14 +363,14 @@ def metrics_from_targets_preds(targets, preds, metric_fn, batch_size=1):
             " of the data.".format(n_left_out)
         )
 
-    preds = jax.tree_map(lambda x: x[:int(n_batches * batch_size)], preds)
+    preds = jax.tree.map(lambda x: x[:int(n_batches * batch_size)], preds)
     if targets is not None:
-        targets = jax.tree_map(lambda x: x[:int(n_batches * batch_size)], targets)
+        targets = jax.tree.map(lambda x: x[:int(n_batches * batch_size)], targets)
 
     metrics = {}
     if metric_fn is not None:
-        # flattened_predictions = jax.tree_map(lambda x: x[:int(n_batches * batch_size)], obs_pred)
+        # flattened_predictions = jax.tree.map(lambda x: x[:int(n_batches * batch_size)], obs_pred)
         for m_name, m_fn in metric_fn.items():
-            metrics[m_name] = jax.tree_map(lambda x, y: m_fn(prediction=x, target=y), preds, targets)
+            metrics[m_name] = jax.tree.map(lambda x, y: m_fn(prediction=x, target=y), preds, targets)
 
     return metrics

@@ -1,3 +1,7 @@
+# Taken from mlff (https://github.com/thorben-frank/mlff, commit 99dbf76)
+# Original author: Thorben Frank et al.
+# Modifications: renamed imports (mlff.src → src)
+
 import jax
 import numpy as np
 import jax.numpy as jnp
@@ -25,8 +29,8 @@ def split_data(data, quantities, n_train, n_valid, n_test=None, seed=0, draw_str
         else:
             return y
 
-    q_data = jax.tree_map(lambda y: reshape(y), q_data)
-    max_key = max(jax.tree_map(lambda y: len(y), q_data), key=jax.tree_map(lambda y: len(y), q_data).get)
+    q_data = jax.tree.map(lambda y: reshape(y), q_data)
+    max_key = max(jax.tree.map(lambda y: len(y), q_data), key=jax.tree.map(lambda y: len(y), q_data).get)
     n_data = len(data[max_key])
 
     idx_all = np.arange(n_data)

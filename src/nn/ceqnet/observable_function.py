@@ -38,17 +38,6 @@ def get_obs_fn(model: GrandNet, observable_key=None) -> ObservableFn:
     return observable_fn
 
 
-# @partial(jax.jit, static_argnums=(2, 3))
-# def grad_obs_fn(p, x, observable_fn, derivatives: Tuple[Derivative] = None):
-#     grad_fn = jax.jacrev(observable_fn, argnums=1, allow_int=True)
-#     grads = grad_fn(p, x)
-#     grad_ops = {}
-#     for d in derivatives:
-#         (n, (d1, d2, scale)) = d
-#         grad_ops.update({n: scale(grads[d1][d2])})
-#     return grad_ops
-
-
 def grad_obs_fn(observable_fn: ObservableFn, derivative: Derivative = None) -> ObservableFn:
     """
     Get the gradient of a single observable with respect to a single input. E.g. forces as function of energy
@@ -106,30 +95,6 @@ def get_grad_observable_fn(model: GrandNet, derivatives: Tuple[Derivative]) -> O
     return all_grad_obs_fn
 
 
-# def get_grad_observable_fn(model: GrandNet, derivatives: Tuple[Derivative]) -> ObservableFn:
-#     """
-#     Get a function that gives the gradients of observables with respect to inputs. E.g. forces as function of energy
-#     would be implemented as the negative gradient of the energy w.r.t. the atomic positions, which would look
-#     like the following: ('F', ('E', 'R', lambda y: -y.squeeze(-3)))`. As energy outputs are of shape (1), the
-#     gradient computation returns an Array of shape (1, n, 3), which is why we squeeze away the extra dimension.
-#
-#     Args:
-#         model (GrandNet): A `GrandNet` module or a module that returns a dictionary of observables.
-#         derivatives (Tuple[Derivative]): The derivatives that should be calculcated. Each `Derivative` is tuple of
-#             the form (name: str, (observable: str, input: str, op: Callable))`. Argument passed should be a tuple of
-#             derivatives.
-#
-#
-#     Returns: Gradient function of observables w.r.t. inputs.
-#
-#     """
-#
-#     obs_fn = get_observable_fn(model)
-#     return lambda p, x: grad_obs_fn(p,
-#                                     x,
-#                                     observable_fn=obs_fn,
-#                                     derivatives=derivatives)
-
 
 def get_obs_and_grad_obs_fn(model: GrandNet, derivatives: Tuple[Derivative] = None) -> ObservableFn:
     """
@@ -158,7 +123,6 @@ def get_obs_and_grad_obs_fn(model: GrandNet, derivatives: Tuple[Derivative] = No
     else:
         obs_grad_fn = get_grad_observable_fn(model, derivatives=derivatives)
         return lambda p, x: merge_dicts(obs_fn(p, x), obs_grad_fn(p, x))
-        #return lambda p, x: obs_grad_fn(p, x)
 
 
 def get_obs_and_force_fn(model: GrandNet) -> ObservableFn:

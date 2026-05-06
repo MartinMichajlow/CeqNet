@@ -1,3 +1,8 @@
+# Partially adapted from mlff (https://github.com/thorben-frank/mlff, commit 99dbf76)
+# Original author (mlff): Thorben Frank et al.
+# Adapted from mlff: mse_loss, energy_loss, force_loss
+# Original contributions: get_loss_fn (rewritten to support CeqNet observables and charge conservation loss)
+
 import jax.numpy as jnp
 from typing import (Dict, Tuple)
 
@@ -37,6 +42,7 @@ def force_loss(*, y, y_true):
     return jnp.mean(1/n_fc*((y - y_true)**2).sum(-1).sum(-1))
 
 
+# [Original contribution]
 def get_loss_fn(obs_fn, weights, qtot: bool=False, qlambda:float=0.0):
     """
     Returns loss function for given ceqnet. If qtot=False, loss_fn gets only generated as weighted mse sum of loss
@@ -58,11 +64,6 @@ def get_loss_fn(obs_fn, weights, qtot: bool=False, qlambda:float=0.0):
                 _l = mse_loss(y_true=outputs[name], y=targets[name])
                 loss += weights[name] * _l
                 train_metrics.update({name: _l})
-
-            # for name, w in weights.items():
-            #     _l = mse_loss(y_true=outputs[name], y=targets[name])
-            #     loss += w * _l
-            #     train_metrics.update({name: _l})
             loss = jnp.reshape(loss, ())
             train_metrics.update({'loss': loss})
 
@@ -84,11 +85,6 @@ def get_loss_fn(obs_fn, weights, qtot: bool=False, qlambda:float=0.0):
             qtot = inputs['Q']
             eps = 1e-10
             loss += qlambda * jnp.sum(jnp.abs(qtot_pred - qtot)/(qtot+eps))
-
-            # for name, w in weights.items():
-            #     _l = mse_loss(y_true=outputs[name], y=targets[name])
-            #     loss += w * _l
-            #     train_metrics.update({name: _l})
             loss = jnp.reshape(loss, ())
             train_metrics.update({'loss': loss})
 

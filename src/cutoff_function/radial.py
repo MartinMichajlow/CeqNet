@@ -1,3 +1,7 @@
+# Adapted from mlff (https://github.com/thorben-frank/mlff, commit 99dbf76)
+# Original author: Thorben Frank et al.
+# Modifications: renamed imports (mlff.src → src)
+
 import jax.numpy as jnp
 import logging
 from typing import Callable

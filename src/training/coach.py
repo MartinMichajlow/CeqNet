@@ -1,3 +1,8 @@
+# Partially adapted from mlff (https://github.com/thorben-frank/mlff, commit 99dbf76)
+# Original author (mlff): Thorben Frank et al.
+# Adapted from mlff: Coach class structure, run method, __dict_repr__
+# Original contributions: qtot_loss and qlambda fields
+
 import logging
 logging.basicConfig(level=logging.INFO)
 import jax.numpy as jnp
@@ -7,7 +12,6 @@ from typing import (Any, Callable, Dict, Sequence, Tuple)
 from flax.core.frozen_dict import FrozenDict
 
 from .run import run_training
-from .deprecated.run_sl import run_training_sl
 
 
 Array = Any
@@ -31,10 +35,10 @@ class Coach:
     data_path: str
     net_seed: int = 0
     training_seed: int = 0
-    qtot_loss: bool = False
-    qlambda: float = None
+    qtot_loss: bool = False  # [Original contribution]
+    qlambda: float = None    # [Original contribution]
 
-    def run(self, train_state, train_ds, valid_ds, loss_fn, metric_fn=None, use_wandb:bool = True, **kwargs):
+    def run(self, train_state, train_ds, valid_ds, loss_fn, metric_fn=None, use_wandb: bool = True, **kwargs):
         logging.info('started coach.run()')
         run_training(state=train_state,
                      loss_fn=loss_fn,
@@ -49,21 +53,6 @@ class Coach:
                      use_wandb=use_wandb,
                      **kwargs
                      )
-
-    def run_sl(self, train_state, train_ds, valid_ds, loss_fn, learning_rate,  metric_fn=None, use_wandb:bool = True, **kwargs):
-        run_training_sl(state=train_state,
-                        loss_fn=loss_fn,
-                        train_ds=train_ds,
-                        valid_ds=valid_ds,
-                        train_bs=self.training_batch_size,
-                        valid_bs=self.validation_batch_size,
-                        learning_rate=learning_rate,
-                        ckpt_dir=self.ckpt_dir,
-                        seed=self.training_seed,
-                        use_wandb=use_wandb,
-                        **kwargs
-                        )
-
 
     def __dict_repr__(self):
         return {'coach': {'input_keys': self.input_keys,

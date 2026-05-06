@@ -1,3 +1,7 @@
+# Taken from mlff (https://github.com/thorben-frank/mlff, commit 99dbf76)
+# Original author: Thorben Frank et al.
+# Modifications: renamed imports (mlff.src → src)
+
 from jax.ops import segment_sum
 import jax.numpy as jnp
 from typing import (Callable, Sequence)

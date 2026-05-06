@@ -1,0 +1,54 @@
+# Sweep configurations (selected by --run_idx / $SLURM_ARRAY_TASK_ID, 1-indexed)
+# obs_type: 'dipole' or 'quadrupole'
+# obs_mode: one or more tokens joined by '+'.
+#   Dipole tokens:     ceqdip, trivdip, redisdip, atomicdip
+#   Quadrupole tokens: ceqquad, trivquad, redisquad, atomicquad, atomicdipquad
+# alpha: blend weight for two-token modes — float in (0,1) or 'learnable' (optional)
+sweep:
+  # --- Dipole runs ---
+  - {obs_type: dipole, obs_mode: redisdip,            r_cut: 7.0, n_layers: 2, loss_weights: {mu: 1.0}}  # run 1
+  - {obs_type: dipole, obs_mode: redisdip,            r_cut: 5.0, n_layers: 3, loss_weights: {mu: 1.0}}  # run 2
+  - {obs_type: dipole, obs_mode: ceqdip,              r_cut: 7.0, n_layers: 2, loss_weights: {mu: 1.0}}  # run 3
+  - {obs_type: dipole, obs_mode: ceqdip,              r_cut: 5.0, n_layers: 3, loss_weights: {mu: 1.0}}  # run 4
+  - {obs_type: dipole, obs_mode: atomicdip,           r_cut: 5.0, n_layers: 3, loss_weights: {mu: 1.0}}  # run 5
+  - {obs_type: dipole, obs_mode: ceqdip+atomicdip, alpha: learnable, r_cut: 5.0, n_layers: 3, loss_weights: {mu: 1.0}}  # run 6
+  # --- Quadrupole runs ---
+  - {obs_type: quadrupole, obs_mode: redisquad,       r_cut: 7.0, n_layers: 2, loss_weights: {quad: 1.0}}  # run 7
+  - {obs_type: quadrupole, obs_mode: redisquad,       r_cut: 5.0, n_layers: 3, loss_weights: {quad: 1.0}}  # run 8
+  - {obs_type: quadrupole, obs_mode: ceqquad,         r_cut: 7.0, n_layers: 2, loss_weights: {quad: 1.0}}  # run 9
+  - {obs_type: quadrupole, obs_mode: ceqquad,         r_cut: 5.0, n_layers: 3, loss_weights: {quad: 1.0}}  # run 10
+  - {obs_type: quadrupole, obs_mode: atomicdipquad,   r_cut: 5.0, n_layers: 3, loss_weights: {quad: 1.0}}  # run 11
+  - {obs_type: quadrupole, obs_mode: ceqquad+atomicdipquad, alpha: learnable, r_cut: 5.0, n_layers: 3, loss_weights: {quad: 1.0}}  # run 12
+
+# Model hyperparameters (shared across all runs)
+model:
+  F: 132
+  degrees: [0, 1, 2]
+  n_rbf: 32
+  num_embeddings: 100
+  n_head: 4
+  activation: silu
+  radial_basis_function: phys
+  radial_cutoff_function: cosine_cutoff_fn
+  hardness_mode: 20sgm
+  radii_mode: 20sgm
+
+# Training hyperparameters
+training:
+  n_epochs: 2500
+  batch_size: 10
+  learning_rate: 1.0e-3
+  decay_rate: 0.7
+  transition_steps: 100000
+  net_seed: 0
+  training_seed: 0
+
+# Data paths (cluster)
+data:
+  train: /path/to/repo/examples/data/TrainANI1x.npz
+  valid: /path/to/repo/examples/data/ValANI1x.npz
+  test:  /path/to/repo/examples/data/TestANI1x.npz
+
+# Output
+output:
+  base_dir: /path/to/repo/examples/output

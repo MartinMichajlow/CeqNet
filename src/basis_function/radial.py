@@ -1,3 +1,7 @@
+# Adapted from mlff (https://github.com/thorben-frank/mlff, commit 99dbf76)
+# Original author: Thorben Frank et al.
+# Modifications: renamed imports (mlff.src → src); removed BernsteinBasis (unused in CeqNet)
+
 from jax import numpy as jnp
 import flax.linen as nn
 

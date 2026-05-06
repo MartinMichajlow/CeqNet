@@ -1,6 +1,8 @@
+# Taken from mlff (https://github.com/thorben-frank/mlff, commit 99dbf76)
+# Original author: Thorben Frank et al.
+# Modifications: renamed imports (mlff.src → src)
+
 import optax
-from flax import traverse_util
-from flax.core.frozen_dict import freeze, unfreeze
 from optax import constant_schedule
 from dataclasses import dataclass
 
@@ -114,68 +116,4 @@ def optimizer(learning_rate,
     )
 
 
-def flattened_traversal(fn):
-    def mask(data):
-        flat = traverse_util.flatten_dict(unfreeze(data))
-        return freeze(traverse_util.unflatten_dict({k: fn(k, v) for k, v in flat.items()}))
-    return mask
-
-
-def decay_mask_fn(params):
-    flat_params = traverse_util.flatten_dict(unfreeze(params))
-    flat_mask = {path: (path[-1] != "bias" and path[-2:] != ("LayerNorm", "scale")) for path in flat_params}
-    return freeze(traverse_util.unflatten_dict(flat_mask))
-
-
-# TODO: legacy, take care of secure removal
-
-#                                                                                                                      #
-#                                     Initialize optimizer from dictionary/json                                        #
-#                                                                                                                      #
-
-
-OPTIMIZER_hyperparameters = {'learning_rate': None,
-                             'weight_decay': None,
-                             'transition_steps': None,
-                             'decay_rate': None
-                             }
-
-
-def hyper_params_to_properties(hyper_params):
-    lr = hyper_params['learning_rate']
-    if lr is None:
-        raise ValueError("Learning rate must be specified in the optimizer hyperparameters"
-                         "since no default value has been set")
-
-    weight_decay = 0. if hyper_params['weight_decay'] is None else hyper_params['weight_decay']
-    mask = None if hyper_params['weight_decay'] is None else flattened_traversal(lambda path, _: path[-1] != 'bias')
-    if hyper_params['transition_steps'] is None or hyper_params['decay_rate'] is None:
-        step_size_fn = None
-    else:
-        step_size_fn = exponential_decay(1.,
-                                         transition_steps=hyper_params['transition_steps'],
-                                         decay_rate=hyper_params['decay_rate']
-                                         )
-
-    return {'learning_rate': lr,
-            'weight_decay': weight_decay,
-            'mask': mask,
-            'step_size_fn': step_size_fn
-            }
-
-
-def optimizer_from_hyper_params(hyper_params: Dict):
-    d = {}
-    for k, v_default in OPTIMIZER_hyperparameters.items():
-        try:
-            v = hyper_params[k]
-        except KeyError:
-            v = v_default
-            logging.warning('The argument {} is missing in the optimizer hyperparameters. Set default '
-                            '{}={}.'.format(k, k, v_default))
-
-        d[k] = v
-
-    d = hyper_params_to_properties(d)
-    return optimizer(**d)
 

@@ -69,8 +69,8 @@ class CeqNet(nn.Module):
         x = jnp.stack(embeds, axis=-1).sum(axis=-1) / jnp.sqrt(len(embeds))  # shape: (n,F)
         quantities.update({'x': x})
 
-        # Initialize hardness, only in ceq mode
-        if self.mode == 'ceq':
+        # Initialize hardness when any ceq-based observable is used
+        if 'ceq' in self.mode:
             for charge_emb in self.charge_embeddings:
                 charge_quantities = charge_emb(quantities)
                 quantities.update(charge_quantities)
@@ -93,7 +93,7 @@ class CeqNet(nn.Module):
             for key in observables.keys():
                 if key in self.eval_keys:
                     eval_observables.update({key: observables[key]})
-        return jax.tree_map(lambda y: y[..., None], eval_observables)
+        return jax.tree.map(lambda y: y[..., None], eval_observables)
 
 
     def __dict_repr__(self):
